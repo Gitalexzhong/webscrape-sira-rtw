@@ -1,21 +1,41 @@
-import React, { useEffect, useState, useMemo } from "react";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
-import { Box, Typography, List, ListItem, Link as MuiLink, TextField, IconButton, Paper, AppBar, Toolbar, Tooltip, Button, Popover, Checkbox, ListItemText, ListItemIcon, List as MuiList, Divider } from "@mui/material";
-import Papa from "papaparse";
+import React, { useEffect, useState, useMemo } from 'react';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import {
+  Box,
+  Typography,
+  List,
+  ListItem,
+  Link as MuiLink,
+  TextField,
+  IconButton,
+  Paper,
+  AppBar,
+  Toolbar,
+  Tooltip,
+  Button,
+  Popover,
+  Checkbox,
+  ListItemText,
+  ListItemIcon,
+  List as MuiList,
+  Divider,
+} from '@mui/material';
+import Papa from 'papaparse';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import CloseIcon from '@mui/icons-material/Close';
 import SearchIcon from '@mui/icons-material/Search';
 
 // Fix default marker icon
-import iconUrl from "leaflet/dist/images/marker-icon.png";
-import iconShadow from "leaflet/dist/images/marker-shadow.png";
+import iconUrl from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 const DefaultIcon = L.icon({ iconUrl, shadowUrl: iconShadow });
 
 // Add a yellow icon for groups containing any highlighted (favorite) providers
 const yellowIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-yellow.png',
+  iconUrl:
+    'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-yellow.png',
   shadowUrl: iconShadow,
   iconSize: [25, 41],
   iconAnchor: [12, 41],
@@ -39,18 +59,18 @@ const DEFAULT_CENTER = [-33.8688, 151.2093]; // Sydney
 
 export default function MapView() {
   const [providers, setProviders] = useState([]);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState('');
   const [anchorEl, setAnchorEl] = useState(null);
   const [providerStates, setProviderStates] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem("providerStates") || '{}');
+      return JSON.parse(localStorage.getItem('providerStates') || '{}');
     } catch {
       return {};
     }
   });
   const [searchHistory, setSearchHistory] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem("searchHistory") || "[]");
+      return JSON.parse(localStorage.getItem('searchHistory') || '[]');
     } catch {
       return [];
     }
@@ -59,7 +79,7 @@ export default function MapView() {
   const MAX_HISTORY = 5;
 
   useEffect(() => {
-    fetch("/cleaned_providers.csv")
+    fetch('/cleaned_providers.csv')
       .then((r) => r.text())
       .then((csv) => {
         Papa.parse(csv, {
@@ -68,7 +88,11 @@ export default function MapView() {
           complete: (results) => {
             setProviders(
               results.data.filter(
-                (row) => row.Latitude && row.Longitude && !isNaN(row.Latitude) && !isNaN(row.Longitude)
+                (row) =>
+                  row.Latitude &&
+                  row.Longitude &&
+                  !isNaN(row.Latitude) &&
+                  !isNaN(row.Longitude)
               )
             );
           },
@@ -77,27 +101,38 @@ export default function MapView() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("searchHistory", JSON.stringify(searchHistory));
+    localStorage.setItem('searchHistory', JSON.stringify(searchHistory));
   }, [searchHistory]);
 
   // Persist providerStates in localStorage
   useEffect(() => {
-    localStorage.setItem("providerStates", JSON.stringify(providerStates));
+    localStorage.setItem('providerStates', JSON.stringify(providerStates));
   }, [providerStates]);
   const handleProviderState = (company) => {
     setProviderStates((prev) => {
       const current = prev[company] || 'normal';
-      const next = current === 'normal' ? 'highlighted' : current === 'highlighted' ? 'hidden' : 'normal';
+      const next =
+        current === 'normal'
+          ? 'highlighted'
+          : current === 'highlighted'
+          ? 'hidden'
+          : 'normal';
       return { ...prev, [company]: next };
     });
   };
 
   const filteredProviders = useMemo(() => {
-    return providers.filter((p) => (providerStates[p.Company] !== 'hidden'));
+    return providers.filter((p) => providerStates[p.Company] !== 'hidden');
   }, [providers, providerStates]);
 
-  const grouped = useMemo(() => groupByLocation(filteredProviders), [filteredProviders]);
-  const allCompanies = useMemo(() => Array.from(new Set(providers.map((p) => p.Company))).sort(), [providers]);
+  const grouped = useMemo(
+    () => groupByLocation(filteredProviders),
+    [filteredProviders]
+  );
+  const allCompanies = useMemo(
+    () => Array.from(new Set(providers.map((p) => p.Company))).sort(),
+    [providers]
+  );
 
   // Floating filter bar logic
   const handleFilterClick = (event) => {
@@ -112,22 +147,55 @@ export default function MapView() {
   const handleSearchKeyDown = async (e) => {
     if (e.key === 'Enter' && search.trim()) {
       setSearchHistory((prev) => {
-        const updated = [search.trim(), ...prev.filter((s) => s !== search.trim())].slice(0, MAX_HISTORY);
+        const updated = [
+          search.trim(),
+          ...prev.filter((s) => s !== search.trim()),
+        ].slice(0, MAX_HISTORY);
         return updated;
       });
     }
   };
 
   return (
-    <Box sx={{ height: '100vh', width: '100vw', position: 'fixed', top: 0, left: 0 }}>
+    <Box
+      sx={{
+        height: '100vh',
+        width: '100vw',
+        position: 'fixed',
+        top: 0,
+        left: 0,
+      }}
+    >
       {/* Floating header bar */}
-      <Box sx={{ position: 'absolute', top: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 1200, width: 'auto', minWidth: 350, maxWidth: 600, background: 'rgba(255,255,255,0.97)', borderRadius: 3, boxShadow: 3, px: 3, py: 1, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <Typography variant="h6" sx={{ color: '#222', fontWeight: 700, flexShrink: 0 }}>
+      <Box
+        sx={{
+          position: 'absolute',
+          top: 24,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 1200,
+          width: 'auto',
+          minWidth: 350,
+          maxWidth: 600,
+          background: 'rgba(255,255,255,0.97)',
+          borderRadius: 3,
+          boxShadow: 3,
+          px: 3,
+          py: 1,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+        }}
+      >
+        <Typography
+          variant="h6"
+          sx={{ color: '#222', fontWeight: 700, flexShrink: 0 }}
+        >
           RTW Rehab Provider Search
         </Typography>
         <TextField
           value={search}
-          onChange={e => setSearch(e.target.value)}
+          onChange={(e) => setSearch(e.target.value)}
           onKeyDown={handleSearchKeyDown}
           onFocus={() => setSearchFocused(true)}
           onBlur={() => setTimeout(() => setSearchFocused(false), 100)}
@@ -139,8 +207,11 @@ export default function MapView() {
         <IconButton
           onClick={() => {
             if (search.trim()) {
-              setSearchHistory(prev => {
-                const updated = [search.trim(), ...prev.filter(s => s !== search.trim())].slice(0, MAX_HISTORY);
+              setSearchHistory((prev) => {
+                const updated = [
+                  search.trim(),
+                  ...prev.filter((s) => s !== search.trim()),
+                ].slice(0, MAX_HISTORY);
                 return updated;
               });
             }
@@ -151,10 +222,35 @@ export default function MapView() {
           <SearchIcon />
         </IconButton>
         {searchFocused && searchHistory.length > 0 && (
-          <Paper sx={{ position: 'absolute', top: 64, left: 0, right: 0, zIndex: 10 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 1, py: 0.5 }}>
-              <Typography variant="caption" sx={{ fontWeight: 600 }}>Recent Searches</Typography>
-              <Button size="small" color="error" onMouseDown={() => setSearchHistory([])} sx={{ minWidth: 0, p: 0.5, fontSize: 12 }}>Clear All</Button>
+          <Paper
+            sx={{
+              position: 'absolute',
+              top: 64,
+              left: 0,
+              right: 0,
+              zIndex: 10,
+            }}
+          >
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                px: 1,
+                py: 0.5,
+              }}
+            >
+              <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                Recent Searches
+              </Typography>
+              <Button
+                size="small"
+                color="error"
+                onMouseDown={() => setSearchHistory([])}
+                sx={{ minWidth: 0, p: 0.5, fontSize: 12 }}
+              >
+                Clear All
+              </Button>
             </Box>
             <MuiList dense>
               {searchHistory.map((item, idx) => (
@@ -163,7 +259,14 @@ export default function MapView() {
                   key={idx}
                   onMouseDown={() => setSearch(item)}
                   secondaryAction={
-                    <IconButton edge="end" size="small" onMouseDown={e => { e.stopPropagation(); setSearchHistory(h => h.filter((_, i) => i !== idx)); }}>
+                    <IconButton
+                      edge="end"
+                      size="small"
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        setSearchHistory((h) => h.filter((_, i) => i !== idx));
+                      }}
+                    >
                       <CloseIcon fontSize="small" />
                     </IconButton>
                   }
@@ -175,7 +278,18 @@ export default function MapView() {
           </Paper>
         )}
         <Tooltip title="Filter providers">
-          <IconButton onClick={handleFilterClick} size="large" sx={{ ml: 1, borderRadius: 2, boxShadow: 1, border: '1.5px solid #d0d7e2', background: '#fff', p: 1 }}>
+          <IconButton
+            onClick={handleFilterClick}
+            size="large"
+            sx={{
+              ml: 1,
+              borderRadius: 2,
+              boxShadow: 1,
+              border: '1.5px solid #d0d7e2',
+              background: '#fff',
+              p: 1,
+            }}
+          >
             <FilterListIcon />
           </IconButton>
         </Tooltip>
@@ -187,13 +301,38 @@ export default function MapView() {
         onClose={handleFilterClose}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        PaperProps={{ sx: { p: 2, minWidth: 270, maxHeight: 400, overflow: 'auto', borderRadius: 2, boxShadow: 6 } }}
+        PaperProps={{
+          sx: {
+            p: 2,
+            minWidth: 270,
+            maxHeight: 400,
+            overflow: 'auto',
+            borderRadius: 2,
+            boxShadow: 6,
+          },
+        }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700, letterSpacing: 0.5, color: 'primary.main' }}>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            mb: 1,
+          }}
+        >
+          <Typography
+            variant="subtitle1"
+            sx={{ fontWeight: 700, letterSpacing: 0.5, color: 'primary.main' }}
+          >
             Provider Visibility
           </Typography>
-          <Button onClick={() => setProviderStates({})} size="small" variant="outlined" color="error" sx={{ fontWeight: 700, ml: 2 }}>
+          <Button
+            onClick={() => setProviderStates({})}
+            size="small"
+            variant="outlined"
+            color="error"
+            sx={{ fontWeight: 700, ml: 2 }}
+          >
             Clear All
           </Button>
         </Box>
@@ -210,7 +349,8 @@ export default function MapView() {
                 sx={{
                   ...(providerStates[company] === 'highlighted'
                     ? {
-                        background: 'linear-gradient(90deg, #fffbe6 60%, #ffe066 100%)',
+                        background:
+                          'linear-gradient(90deg, #fffbe6 60%, #ffe066 100%)',
                         border: 'none',
                         borderRadius: 1,
                         boxShadow: 'none',
@@ -231,7 +371,16 @@ export default function MapView() {
                 onClick={() => handleProviderState(company)}
               >
                 <ListItemText
-                  primary={<span style={{ fontWeight: state === 'highlighted' ? 700 : 400, color: state === 'hidden' ? '#aaa' : undefined }}>{company}</span>}
+                  primary={
+                    <span
+                      style={{
+                        fontWeight: state === 'highlighted' ? 700 : 400,
+                        color: state === 'hidden' ? '#aaa' : undefined,
+                      }}
+                    >
+                      {company}
+                    </span>
+                  }
                 />
                 <Box sx={{ ml: 1, fontSize: 22 }}>{icon}</Box>
               </ListItem>
@@ -239,7 +388,11 @@ export default function MapView() {
           })}
         </MuiList>
       </Popover>
-      <MapContainer center={DEFAULT_CENTER} zoom={5} style={{ height: "100vh", width: "100vw", zIndex: 0 }}>
+      <MapContainer
+        center={DEFAULT_CENTER}
+        zoom={5}
+        style={{ height: '100vh', width: '100vw', zIndex: 0 }}
+      >
         <TileLayer
           attribution='&copy; <a href="https://osm.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -247,28 +400,48 @@ export default function MapView() {
         {grouped.map((group, i) => (
           <Marker
             key={i}
-            position={[parseFloat(group[0].Latitude), parseFloat(group[0].Longitude)]}
-            icon={group.some(p => providerStates[p.Company] === 'highlighted') ?
-              L.icon({
-                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-yellow.png',
-                shadowUrl: iconShadow,
-                iconSize: [25, 41],
-                iconAnchor: [12, 41],
-                popupAnchor: [1, -34],
-                shadowSize: [41, 41],
-              }) : DefaultIcon}
+            position={[
+              parseFloat(group[0].Latitude),
+              parseFloat(group[0].Longitude),
+            ]}
+            icon={
+              group.some((p) => providerStates[p.Company] === 'highlighted')
+                ? L.icon({
+                    iconUrl:
+                      'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-yellow.png',
+                    shadowUrl: iconShadow,
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41],
+                    popupAnchor: [1, -34],
+                    shadowSize: [41, 41],
+                  })
+                : DefaultIcon
+            }
           >
             <Popup minWidth={220} maxWidth={260}>
               <Box>
                 {group.length === 1 ? (
-                  <ProviderDetails provider={group[0]} providerStates={providerStates} handleProviderState={handleProviderState} />
+                  <ProviderDetails
+                    provider={group[0]}
+                    providerStates={providerStates}
+                    handleProviderState={handleProviderState}
+                  />
                 ) : (
                   <Box>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>{group.length} providers at this location:</Typography>
+                    <Typography
+                      variant="subtitle2"
+                      sx={{ fontWeight: 600, mb: 0.5 }}
+                    >
+                      {group.length} providers at this location:
+                    </Typography>
                     <List dense sx={{ p: 0 }}>
                       {group.map((p, idx) => (
                         <ListItem key={idx} disablePadding sx={{ p: 0, m: 0 }}>
-                          <ProviderDetails provider={p} providerStates={providerStates} handleProviderState={handleProviderState} />
+                          <ProviderDetails
+                            provider={p}
+                            providerStates={providerStates}
+                            handleProviderState={handleProviderState}
+                          />
                         </ListItem>
                       ))}
                     </List>
@@ -286,25 +459,50 @@ export default function MapView() {
 function ProviderDetails({ provider, providerStates, handleProviderState }) {
   const state = providerStates[provider.Company] || 'normal';
   return (
-    <Box sx={{ px: 1, py: 0.5, bgcolor: state === 'highlighted' ? 'gold' : undefined, border: state === 'highlighted' ? '2px solid #ffb300' : undefined, borderRadius: 1 }}>
+    <Box
+      sx={{
+        px: 1,
+        py: 0.5,
+        bgcolor: state === 'highlighted' ? 'gold' : undefined,
+        border: state === 'highlighted' ? '2px solid #ffb300' : undefined,
+        borderRadius: 1,
+      }}
+    >
       <Typography
         variant="subtitle2"
-        sx={{ fontWeight: 600, lineHeight: 1.2, color: 'primary.main', cursor: 'pointer', textDecoration: 'underline' }}
+        sx={{
+          fontWeight: 600,
+          lineHeight: 1.2,
+          color: 'primary.main',
+          cursor: 'pointer',
+          textDecoration: 'underline',
+        }}
         component="a"
         href={provider.Link}
         target="_blank"
         rel="noopener"
-        onClick={e => { e.stopPropagation(); handleProviderState(provider.Company); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleProviderState(provider.Company);
+        }}
       >
         {provider.Company}
       </Typography>
-      <Typography variant="caption" sx={{ display: 'block', lineHeight: 1.2 }}>{provider["Business address"]}</Typography>
+      <Typography variant="caption" sx={{ display: 'block', lineHeight: 1.2 }}>
+        {provider['Business address']}
+      </Typography>
       <Typography variant="caption" sx={{ display: 'block', lineHeight: 1.2 }}>
         {provider.Suburb}, {provider.State} {provider.Postcode}
       </Typography>
-      <Typography variant="caption" sx={{ display: 'block', lineHeight: 1.2 }}>Region: {provider.Region}</Typography>
-      <Typography variant="caption" sx={{ display: 'block', lineHeight: 1.2 }}>Phone: {provider.Phone}</Typography>
-      <Typography variant="caption" sx={{ display: 'block', lineHeight: 1.2 }}>Provider #: {provider["Provider number"]}</Typography>
+      <Typography variant="caption" sx={{ display: 'block', lineHeight: 1.2 }}>
+        Region: {provider.Region}
+      </Typography>
+      <Typography variant="caption" sx={{ display: 'block', lineHeight: 1.2 }}>
+        Phone: {provider.Phone}
+      </Typography>
+      <Typography variant="caption" sx={{ display: 'block', lineHeight: 1.2 }}>
+        Provider #: {provider['Provider number']}
+      </Typography>
     </Box>
   );
 }
