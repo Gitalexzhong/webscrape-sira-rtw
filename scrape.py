@@ -1,89 +1,109 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-import time
-import csv
 import re
+import pandas as pd
+from bs4 import BeautifulSoup
+from geopy.geocoders import Nominatim
+import time
+import datetime
 
-# Setup Chrome options
-chrome_options = Options()
-chrome_options.add_argument("--headless")  # Run in headless mode
-chrome_options.add_argument("--disable-gpu")
-chrome_options.add_argument("--no-sandbox")
+# Helper to normalize whitespace
+def clean_text(text):
+    return re.sub(r'\s+', ' ', text).strip()
 
-# Launch the browser
-driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+# Helper to extract company name (before ' - ')
+def extract_company(name):
+    if ' - ' in name:
+        return name.split(' - ')[0].strip()
+    return name.strip()
 
-# Load the target URL
-url = "https://www.sira.nsw.gov.au/information-search/rehab-provider/search"
-driver.get(url)
+# Read the HTML file
+with open('data-raw.html', 'r', encoding='utf-8') as f:
+    html = f.read()
 
-# Wait for the JavaScript to load content
-time.sleep(5)
+soup = BeautifulSoup(html, 'html.parser')
+rows = soup.find_all('tr')
 
-# Scroll to load all providers (if it's infinite scrolling or lazy loaded)
-# driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-# time.sleep(2)  # Optional
+data = []
+geolocator = Nominatim(user_agent="sira_rtw_scraper_v2")
 
-# Find all provider cards
-provider_cards = driver.find_elements(By.CLASS_NAME, "search-result-card")
+# Parse all rows and build a list of dicts (without geocoding yet)
+for idx, row in enumerate(rows):
+    tds = row.find_all('td')
+    comments = [c for c in row.children if isinstance(c, type(soup.comment))]
+    provider_number = None
+    for comment in comments:
+        match = re.search(r'<td>(\\d+)</td>', comment)
+        if match:
+            provider_number = match.group(1)
+    if len(tds) >= 7:
+        link_tag = tds[0].find('a')
+        name = clean_text(link_tag.text) if link_tag else ''
+        link = link_tag['href'] if link_tag else ''
+        business_address = clean_text(tds[1].text)
+        suburb = clean_text(tds[2].text)
+        state = clean_text(tds[3].text)
+        postcode = clean_text(tds[4].text)
+        region = clean_text(tds[5].text)
+        phone = clean_text(tds[6].text)
+        company = extract_company(name)
+        full_address = f"{business_address}, {suburb}, {state} {postcode}, Australia"
+        data.append({
+            'Name': name,
+            'Company': company,
+            'Business address': business_address,
+            'Suburb': suburb,
+            'State': state,
+            'Postcode': postcode,
+            'Region': region,
+            'Phone': phone,
+            'Link': link,
+            'Provider number': provider_number,
+            'Full address': full_address
+        })
 
-results = []
+# Geocode sequentially
+results = [None] * len(data)
+start_time = time.time()
 
-if not provider_cards:
-    print("No provider cards found. The page might have changed or failed to load.")
-else:
-    for card in provider_cards:
+total = len(data)
+for i, row in enumerate(data):
+    lat, lon = None, None
+    # Try full address, then postcode, then just suburb+state+postcode
+    attempts = [
+        row['Full address'],
+        f"{row['Postcode']}, Australia",
+        f"{row['Suburb']}, {row['State']} {row['Postcode']}, Australia"
+    ]
+    for attempt in attempts:
         try:
-            name = card.find_element(By.CLASS_NAME, "provider-name-heading").text.strip()
+            location = geolocator.geocode(attempt)
+            if location:
+                lat, lon = location.latitude, location.longitude
+                break
+        except Exception:
+            pass
+        time.sleep(1)  # Respect Nominatim's 1 request/sec limit
+    results[i] = (lat, lon)
+    elapsed = time.time() - start_time
+    avg_time = elapsed / (i+1)
+    remaining = total - (i+1)
+    eta = datetime.timedelta(seconds=int(avg_time * remaining))
+    print(f"[{i+1}/{total} | ETA: {eta}] Processed: {row['Name']} | Lat: {lat} Lon: {lon}")
 
-            address_block = card.find_element(By.CLASS_NAME, "address-block").text.strip()
-            business_address = address_block
-
-            postcode = ""
-            suburb = ""
-            region = ""
-            state = "NSW"
-
-            postcode_match = re.search(r'\b(\d{4})\b', business_address)
-            if postcode_match:
-                postcode = postcode_match.group(1)
-
-            suburb_match = re.search(r',\s*([A-Z\s]+)\s+NSW\s+\d{4}', business_address)
-            if suburb_match:
-                suburb = suburb_match.group(1).title().strip()
-
-            try:
-                phone = card.find_element(By.CLASS_NAME, "phone-number-value").text.strip()
-            except:
-                phone = "N/A"
-
-            results.append({
-                "Name": name,
-                "Business Address": business_address,
-                "Suburb": suburb,
-                "State": state,
-                "Postcode": postcode,
-                "Region": region,
-                "Phone": phone
-            })
-
-        except Exception as e:
-            print(f"Error processing card: {e}")
-            continue
-
-# Close the browser
-driver.quit()
+# Attach geocode results
+enriched = []
+for i, row in enumerate(data):
+    lat, lon = results[i]
+    row['Latitude'] = lat
+    row['Longitude'] = lon
+    del row['Full address']
+    enriched.append(row)
 
 # Save to CSV
-if results:
-    keys = results[0].keys()
-    with open('sira_rehab_providers.csv', 'w', newline='', encoding='utf-8') as output_file:
-        dict_writer = csv.DictWriter(output_file, fieldnames=keys)
-        dict_writer.writeheader()
-        dict_writer.writerows(results)
-    print("Data saved to sira_rehab_providers.csv")
+missing_coords = sum(1 for lat, lon in results if lat is None or lon is None)
+df = pd.DataFrame(enriched)
+df.to_csv('cleaned_providers.csv', index=False)
+print('Saved cleaned data to cleaned_providers.csv')
+if missing_coords > 0:
+    print(f"Warning: {missing_coords} entries did not have coordinates generated. Please check the address or postcode for these entries.")
 else:
-    print("No results to save.")
+    print("All entries have coordinates.")
