@@ -1,0 +1,11 @@
+Name,Company,Business address,Suburb,State,Postcode,Region,Phone,Link,Provider number,Latitude,Longitude
+Sydney Rehab,Sydney Rehab,123 Pitt St,Sydney,NSW,2000,Sydney,0299999999,https://example.com/1,1001,-33.8688,151.2093
+Melbourne Health,Melbourne Health,456 Collins St,Melbourne,VIC,3000,Melbourne,0388888888,https://example.com/2,1002,-37.8136,144.9631
+Brisbane Physio,Brisbane Physio,789 Queen St,Brisbane,QLD,4000,Brisbane,0733333333,https://example.com/3,1003,-27.4698,153.0251
+Perth Wellness,Perth Wellness,101 Murray St,Perth,WA,6000,Perth,0866666666,https://example.com/4,1004,-31.9505,115.8605
+Adelaide Care,Adelaide Care,202 King William St,Adelaide,SA,5000,Adelaide,0885555555,https://example.com/5,1005,-34.9285,138.6007
+Canberra Clinic,Canberra Clinic,303 Northbourne Ave,Canberra,ACT,2600,Canberra,0267777777,https://example.com/6,1006,-35.2809,149.1300
+Newcastle Recovery,Newcastle Recovery,404 Hunter St,Newcastle,NSW,2300,Newcastle,0244444444,https://example.com/7,1007,-33.8688,151.2093
+Hobart Support,Hobart Support,505 Macquarie St,Hobart,TAS,7000,Hobart,0361111111,https://example.com/8,1008,-42.8821,147.3272
+Cairns Therapy,Cairns Therapy,606 Sheridan St,Cairns,QLD,4870,Cairns,0742222222,https://example.com/9,1009,-33.8688,151.2093
+Darwin Mobility,Darwin Mobility,707 Smith St,Darwin,NT,0800,Darwin,0880000000,https://example.com/10,1010,-12.4634,130.8456
