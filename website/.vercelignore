@@ -1,0 +1,15 @@
+# .vercelignore
+
+# Ignore Python/data files and root-level files not needed for deployment
+../scrape.py
+../geocode_cache.csv
+../cleaned_providers.csv
+../data-raw.html
+../data-site/
+
+# Ignore node_modules (Vercel installs its own)
+node_modules
+
+# Ignore local dev files
+.DS_Store
+.env

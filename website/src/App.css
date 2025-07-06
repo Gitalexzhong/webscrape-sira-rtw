@@ -40,3 +40,11 @@
 .read-the-docs {
   color: #888;
 }
+
+.marker-bounce {
+  animation: marker-bounce 0.6s infinite alternate;
+}
+@keyframes marker-bounce {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-18px); }
+}

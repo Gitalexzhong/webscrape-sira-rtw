@@ -1,0 +1,20 @@
+# Vercel Configuration for RTW Rehab Provider Search
+
+This file ensures Vercel uses the correct build and output settings for a Vite + React app.
+
+```
+# vercel.json
+{
+  "version": 2,
+  "builds": [
+    { "src": "package.json", "use": "@vercel/static-build", "config": { "distDir": "dist" } }
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
+}
+```
+
+- Place this file in the `website/` directory before deploying to Vercel.
+- Vercel will run `npm run build` and serve the static files from `dist/`.
+- All routes are redirected to `index.html` for client-side routing.
