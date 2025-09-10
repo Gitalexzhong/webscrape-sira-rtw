@@ -5,12 +5,28 @@ A modern, professional, and responsive web app for searching and visualizing Ret
 ## Features
 
 - Interactive map with provider markers and grouped popups
+- Provider popups and lists now show the provider's Name (not just Company)
 - Search by address with geocoding and recent history
 - Filter providers by company with 3-state toggle (normal, highlighted, hidden)
 - List view of closest providers to searched location, with distances
 - Favorites and hidden states persisted in localStorage
 - Loading bar, floating search/filter bar, and clear UI affordances
 - Responsive, compact, and accessible design
+
+## Update Log
+
+### v1.2.0 (2025-09-10)
+
+- Fixed: Clicking any provider in the search list (even in grouped pins) now always opens the correct popup and scrolls to the selected provider
+- Provider popups and lists now show the provider's Name (not just Company)
+- Cleaned up unused variables and lint warnings
+- Minor UI/UX polish
+
+### v1.1.0
+
+- Improved update popup styling and centering
+- Fixed provider link click bug (no longer toggles favorite)
+- Search geocoding now restricted to NSW/Australia for more relevant results
 
 ## Getting Started
 

@@ -1,5 +1,12 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  useMap,
+  Polyline,
+} from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
@@ -59,11 +66,11 @@ function groupByLocation(data) {
 const DEFAULT_CENTER = [-33.8688, 151.2093]; // Sydney
 
 // Version and update summary for popup
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 const UPDATE_SUMMARY = `
-- Improved update popup styling and centering
-- Fixed provider link click bug (no longer toggles favorite)
-- Search geocoding now restricted to NSW/Australia for more relevant results
+- Fixed: Clicking any provider in the search list (even in grouped pins) now always opens the correct popup and scrolls to the selected provider
+- Cleaned up unused variables and lint warnings
+- Minor UI/UX polish
 `;
 
 export default function MapView() {
@@ -89,6 +96,7 @@ export default function MapView() {
   const [listViewOpen, setListViewOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [hoveredProviderId, setHoveredProviderId] = useState(null);
+  const [highlightedProviderId, setHighlightedProviderId] = useState(null);
   const [showUpdatePopup, setShowUpdatePopup] = useState(() => {
     try {
       const lastVersion = localStorage.getItem('lastSeenVersion');
@@ -97,8 +105,12 @@ export default function MapView() {
       return true;
     }
   });
+  const [activePopupMarkerId, setActivePopupMarkerId] = useState(null); // NEW: track which marker's popup should be open
+  const [activePopupProviderId, setActivePopupProviderId] = useState(null); // NEW: track which provider in grouped popup to scroll to
   const markerRefs = useRef({});
   const mapRef = useRef();
+  const listItemRefs = useRef({});
+  const groupedListRefs = useRef({});
   const MAX_HISTORY = 5;
 
   useEffect(() => {
@@ -197,8 +209,16 @@ export default function MapView() {
     }
   };
 
+  // --- Fix: Close all open popups before new search ---
+  const closeAllPopups = () => {
+    Object.values(markerRefs.current).forEach((ref) => {
+      if (ref && ref.closePopup) ref.closePopup();
+    });
+  };
+
   // Geocode search address and add marker
   const handleSearch = async (address) => {
+    closeAllPopups();
     const query = address !== undefined ? address : search;
     if (!query.trim()) return;
     setLoading(true);
@@ -257,19 +277,6 @@ export default function MapView() {
       }))
       .sort((a, b) => a.distance - b.distance);
   }
-
-  // Animate hovered marker
-  useEffect(() => {
-    Object.entries(markerRefs.current).forEach(([providerId, ref]) => {
-      if (ref && ref._icon) {
-        if (hoveredProviderId === providerId) {
-          ref._icon.classList.add('marker-bounce');
-        } else {
-          ref._icon.classList.remove('marker-bounce');
-        }
-      }
-    });
-  }, [hoveredProviderId]);
 
   // Refocus on search marker when it changes
   useEffect(() => {
@@ -572,17 +579,52 @@ export default function MapView() {
             {sortedProviders.slice(0, 10).map((p, idx) => (
               <ListItem
                 key={p['Provider number'] || idx}
+                button
+                ref={(el) => {
+                  listItemRefs.current[p['Provider number']] = el;
+                }}
                 onClick={() => {
-                  const ref = markerRefs.current[p['Provider number']];
+                  // Find the marker ref for the group at this provider's location
+                  const group = grouped.find(
+                    (g) =>
+                      Math.abs(
+                        parseFloat(g[0].Latitude) - parseFloat(p.Latitude)
+                      ) < 1e-5 &&
+                      Math.abs(
+                        parseFloat(g[0].Longitude) - parseFloat(p.Longitude)
+                      ) < 1e-5
+                  );
+                  let ref = null;
+                  if (group && group[0]['Provider number']) {
+                    ref = markerRefs.current[group[0]['Provider number']];
+                  }
                   if (ref && ref.openPopup) {
                     ref.openPopup();
                   }
                   if (ref && ref._latlng && mapRef.current) {
                     mapRef.current.setView(ref._latlng, 15, { animate: true });
                   }
+                  setHighlightedProviderId(p['Provider number']);
+                  // Wait for popup to open, then scroll to grouped provider
+                  setTimeout(() => {
+                    const popupEl =
+                      groupedListRefs.current[p['Provider number']];
+                    if (popupEl && popupEl.scrollIntoView) {
+                      popupEl.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center',
+                      });
+                    }
+                  }, 350);
                 }}
-                onMouseEnter={() => setHoveredProviderId(p['Provider number'])}
-                onMouseLeave={() => setHoveredProviderId(null)}
+                onMouseEnter={() => {
+                  setHoveredProviderId(p['Provider number']);
+                  setHighlightedProviderId(p['Provider number']);
+                }}
+                onMouseLeave={() => {
+                  setHoveredProviderId(null);
+                  setHighlightedProviderId(null);
+                }}
                 sx={{
                   display: 'flex',
                   flexDirection: 'column',
@@ -655,6 +697,51 @@ export default function MapView() {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <MapSearchFocus searchMarker={searchMarker} />
+        {/* Draw polyline from search marker to highlighted provider marker */}
+        {searchMarker &&
+          highlightedProviderId &&
+          (() => {
+            const highlightedProvider = providers.find(
+              (p) => p['Provider number'] === highlightedProviderId
+            );
+            if (
+              highlightedProvider &&
+              highlightedProvider.Latitude &&
+              highlightedProvider.Longitude
+            ) {
+              // Calculate offset for marker base (approximate, since 1 deg lat ~ 111km)
+              const markerHeightMeters = 41; // marker icon height in px
+              const metersPerPixel = (lat) =>
+                (156543.03392 * Math.cos((lat * Math.PI) / 180)) /
+                Math.pow(2, 15); // at zoom 15
+              const offsetLatLng = (lat, lng) => {
+                const metersPerPx = metersPerPixel(lat);
+                const offsetMeters = markerHeightMeters / 2; // half icon height
+                const dLat = offsetMeters / 111320; // 1 deg lat ~ 111.32km
+                return [lat + dLat, lng];
+              };
+              const searchBase = offsetLatLng(
+                searchMarker.lat,
+                searchMarker.lng
+              );
+              const providerBase = offsetLatLng(
+                parseFloat(highlightedProvider.Latitude),
+                parseFloat(highlightedProvider.Longitude)
+              );
+              return (
+                <Polyline
+                  positions={[searchBase, providerBase]}
+                  pathOptions={{
+                    color: 'red',
+                    weight: 3,
+                    dashArray: '6 8',
+                    opacity: 0.85,
+                  }}
+                />
+              );
+            }
+            return null;
+          })()}
         {grouped.map((group, i) => {
           // Prioritize: red (search), yellow (favorite), then normal
           let icon = DefaultIcon;
@@ -688,7 +775,7 @@ export default function MapView() {
               shadowSize: [41, 41],
             });
           }
-          // Attach ref for hover animation
+          // Attach ref for all providers in the group
           const mainProviderId = group[0]['Provider number'];
           return (
             <Marker
@@ -700,6 +787,11 @@ export default function MapView() {
               icon={icon}
               ref={(ref) => {
                 if (mainProviderId) markerRefs.current[mainProviderId] = ref;
+                // Attach the same ref for all providers in this group
+                group.forEach((p) => {
+                  if (p['Provider number'])
+                    markerRefs.current[p['Provider number']] = ref;
+                });
               }}
             >
               <Popup minWidth={220} maxWidth={260}>
@@ -745,7 +837,20 @@ export default function MapView() {
                           <ListItem
                             key={idx}
                             disablePadding
-                            sx={{ p: 0, m: 0 }}
+                            ref={(el) => {
+                              if (!groupedListRefs.current)
+                                groupedListRefs.current = {};
+                              groupedListRefs.current[p['Provider number']] =
+                                el;
+                            }}
+                            sx={{
+                              p: 0,
+                              m: 0,
+                              background:
+                                activePopupProviderId === p['Provider number']
+                                  ? 'rgba(255, 235, 59, 0.18)'
+                                  : undefined,
+                            }}
                           >
                             <ProviderDetails
                               provider={p}
@@ -908,7 +1013,7 @@ function ProviderDetails({ provider, providerStates }) {
           e.stopPropagation();
         }}
       >
-        {provider.Company}
+        {provider.Name || provider.Company}
       </Typography>
       <Typography variant="caption" sx={{ display: 'block', lineHeight: 1.2 }}>
         {provider['Business address']}
