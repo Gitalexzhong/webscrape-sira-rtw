@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
@@ -58,6 +58,14 @@ function groupByLocation(data) {
 
 const DEFAULT_CENTER = [-33.8688, 151.2093]; // Sydney
 
+// Version and update summary for popup
+const APP_VERSION = '1.1.0';
+const UPDATE_SUMMARY = `
+- Improved update popup styling and centering
+- Fixed provider link click bug (no longer toggles favorite)
+- Search geocoding now restricted to NSW/Australia for more relevant results
+`;
+
 export default function MapView() {
   const [providers, setProviders] = useState([]);
   const [search, setSearch] = useState('');
@@ -81,6 +89,14 @@ export default function MapView() {
   const [listViewOpen, setListViewOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [hoveredProviderId, setHoveredProviderId] = useState(null);
+  const [showUpdatePopup, setShowUpdatePopup] = useState(() => {
+    try {
+      const lastVersion = localStorage.getItem('lastSeenVersion');
+      return lastVersion !== APP_VERSION;
+    } catch {
+      return true;
+    }
+  });
   const markerRefs = useRef({});
   const mapRef = useRef();
   const MAX_HISTORY = 5;
@@ -115,6 +131,13 @@ export default function MapView() {
   useEffect(() => {
     localStorage.setItem('providerStates', JSON.stringify(providerStates));
   }, [providerStates]);
+
+  useEffect(() => {
+    if (showUpdatePopup === false) {
+      localStorage.setItem('lastSeenVersion', APP_VERSION);
+    }
+  }, [showUpdatePopup]);
+
   const handleProviderState = (company) => {
     setProviderStates((prev) => {
       const current = prev[company] || 'normal';
@@ -179,8 +202,10 @@ export default function MapView() {
     const query = address !== undefined ? address : search;
     if (!query.trim()) return;
     setLoading(true);
-    // Use Nominatim API for geocoding
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`;
+    // Restrict geocoding to Australia/NSW for more relevant results
+    const url = `https://nominatim.openstreetmap.org/search?format=json&countrycodes=au&viewbox=140.9,-38.0,153.7,-27.0&bounded=1&q=${encodeURIComponent(
+      query + ', NSW, Australia'
+    )}`;
     try {
       const resp = await fetch(url);
       const data = await resp.json();
@@ -192,9 +217,6 @@ export default function MapView() {
           address: display_name,
         });
         setListViewOpen(true);
-        if (mapRef.current) {
-          mapRef.current.setView([parseFloat(lat), parseFloat(lon)], 13);
-        }
       }
     } catch {
       /* ignore geocode errors */
@@ -248,6 +270,15 @@ export default function MapView() {
       }
     });
   }, [hoveredProviderId]);
+
+  // Refocus on search marker when it changes
+  useEffect(() => {
+    if (searchMarker && mapRef.current) {
+      mapRef.current.setView([searchMarker.lat, searchMarker.lng], 15, {
+        animate: true,
+      });
+    }
+  }, [searchMarker]);
 
   return (
     <Box
@@ -308,11 +339,7 @@ export default function MapView() {
           sx={{ background: 'white', borderRadius: 1, minWidth: 200, flex: 1 }}
           autoComplete="off"
         />
-        <IconButton
-          onClick={handleSearch}
-          sx={{ ml: 1 }}
-          size="large"
-        >
+        <IconButton onClick={handleSearch} sx={{ ml: 1 }} size="large">
           <SearchIcon />
         </IconButton>
         {searchFocused && searchHistory.length > 0 && (
@@ -469,7 +496,16 @@ export default function MapView() {
                 <ListItemText
                   primary={
                     <span style={{ display: 'flex', alignItems: 'center' }}>
-                      <span style={{ minWidth: 32, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: '#555', marginRight: 6 }}>
+                      <span
+                        style={{
+                          minWidth: 32,
+                          textAlign: 'right',
+                          fontVariantNumeric: 'tabular-nums',
+                          fontWeight: 600,
+                          color: '#555',
+                          marginRight: 6,
+                        }}
+                      >
                         [{companyCounts[company] || 0}]
                       </span>
                       <span style={{ flex: 1 }}>{company}</span>
@@ -518,10 +554,7 @@ export default function MapView() {
               mb: 1,
             }}
           >
-            <Typography
-              variant="subtitle1"
-              sx={{ fontWeight: 700 }}
-            >
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
               Closest Providers to:
             </Typography>
             <Button
@@ -532,10 +565,7 @@ export default function MapView() {
               Hide
             </Button>
           </Box>
-          <Typography
-            variant="body2"
-            sx={{ mb: 2, color: 'text.secondary' }}
-          >
+          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
             {searchMarker.address}
           </Typography>
           <List dense>
@@ -565,27 +595,25 @@ export default function MapView() {
                       ? 'rgba(0, 123, 255, 0.08)'
                       : undefined,
                   borderRadius:
-                    providerStates[p.Company] === 'highlighted' || hoveredProviderId === p['Provider number'] ? 1 : undefined,
+                    providerStates[p.Company] === 'highlighted' ||
+                    hoveredProviderId === p['Provider number']
+                      ? 1
+                      : undefined,
                   boxShadow:
                     providerStates[p.Company] === 'highlighted' ? 2 : undefined,
-                  px: providerStates[p.Company] === 'highlighted' ? 1 : undefined,
+                  px:
+                    providerStates[p.Company] === 'highlighted' ? 1 : undefined,
                   cursor: 'pointer',
                   transition: 'background 0.2s',
                 }}
               >
-                <Typography
-                  variant="subtitle2"
-                  sx={{ fontWeight: 600 }}
-                >
+                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
                   {p.Company}
                 </Typography>
                 <Typography variant="caption">
                   {p['Business address']}, {p.Suburb}, {p.State} {p.Postcode}
                 </Typography>
-                <Typography
-                  variant="caption"
-                  sx={{ color: 'primary.main' }}
-                >
+                <Typography variant="caption" sx={{ color: 'primary.main' }}>
                   Distance: {p.distance.toFixed(2)} km
                 </Typography>
               </ListItem>
@@ -626,24 +654,33 @@ export default function MapView() {
           attribution='&copy; <a href="https://osm.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
+        <MapSearchFocus searchMarker={searchMarker} />
         {grouped.map((group, i) => {
           // Prioritize: red (search), yellow (favorite), then normal
           let icon = DefaultIcon;
-          if (searchMarker && group.some((p) =>
-            Math.abs(parseFloat(p.Latitude) - searchMarker.lat) < 1e-5 &&
-            Math.abs(parseFloat(p.Longitude) - searchMarker.lng) < 1e-5
-          )) {
+          if (
+            searchMarker &&
+            group.some(
+              (p) =>
+                Math.abs(parseFloat(p.Latitude) - searchMarker.lat) < 1e-5 &&
+                Math.abs(parseFloat(p.Longitude) - searchMarker.lng) < 1e-5
+            )
+          ) {
             icon = L.icon({
-              iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+              iconUrl:
+                'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
               shadowUrl: iconShadow,
               iconSize: [25, 41],
               iconAnchor: [12, 41],
               popupAnchor: [1, -34],
               shadowSize: [41, 41],
             });
-          } else if (group.some((p) => providerStates[p.Company] === 'highlighted')) {
+          } else if (
+            group.some((p) => providerStates[p.Company] === 'highlighted')
+          ) {
             icon = L.icon({
-              iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-yellow.png',
+              iconUrl:
+                'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-yellow.png',
               shadowUrl: iconShadow,
               iconSize: [25, 41],
               iconAnchor: [12, 41],
@@ -666,12 +703,16 @@ export default function MapView() {
               }}
             >
               <Popup minWidth={220} maxWidth={260}>
-                <Box sx={{ maxHeight: 220, overflowY: group.length > 2 ? 'auto' : 'visible' }}>
+                <Box
+                  sx={{
+                    maxHeight: 220,
+                    overflowY: group.length > 2 ? 'auto' : 'visible',
+                  }}
+                >
                   {group.length === 1 ? (
                     <ProviderDetails
                       provider={group[0]}
                       providerStates={providerStates}
-                      handleProviderState={handleProviderState}
                     />
                   ) : (
                     <Box>
@@ -683,19 +724,32 @@ export default function MapView() {
                       </Typography>
                       {/* Show scroll-for-more only in grouped marker popups if many providers */}
                       {group.length > 4 && (
-                        <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', mb: 1 }}>
-                          <Typography variant="caption" sx={{ color: '#888', fontSize: 18 }}>
+                        <Box
+                          sx={{
+                            width: '100%',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            mb: 1,
+                          }}
+                        >
+                          <Typography
+                            variant="caption"
+                            sx={{ color: '#888', fontSize: 18 }}
+                          >
                             ↓ Scroll for more ↓
                           </Typography>
                         </Box>
                       )}
                       <List dense sx={{ p: 0 }}>
                         {group.map((p, idx) => (
-                          <ListItem key={idx} disablePadding sx={{ p: 0, m: 0 }}>
+                          <ListItem
+                            key={idx}
+                            disablePadding
+                            sx={{ p: 0, m: 0 }}
+                          >
                             <ProviderDetails
                               provider={p}
                               providerStates={providerStates}
-                              handleProviderState={handleProviderState}
                             />
                           </ListItem>
                         ))}
@@ -721,24 +775,110 @@ export default function MapView() {
             })}
           >
             <Popup minWidth={220} maxWidth={260}>
-              <Typography
-                variant="subtitle2"
-                sx={{ fontWeight: 600 }}
-              >
+              <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
                 Search Location
               </Typography>
-              <Typography variant="caption">
-                {searchMarker.address}
-              </Typography>
+              <Typography variant="caption">{searchMarker.address}</Typography>
             </Popup>
           </Marker>
         )}
+        <MapSearchFocus searchMarker={searchMarker} />
       </MapContainer>
+      {showUpdatePopup && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            zIndex: 3000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(0,0,0,0.18)',
+          }}
+        >
+          <Paper
+            sx={{
+              minWidth: 340,
+              maxWidth: 420,
+              p: 4,
+              borderRadius: 4,
+              boxShadow: 8,
+              background: 'rgba(255,255,255,0.98)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                width: '100%',
+                mb: 1,
+              }}
+            >
+              <Typography
+                variant="h6"
+                sx={{ fontWeight: 700, color: 'primary.main', flex: 1 }}
+              >
+                What’s New (v{APP_VERSION})
+              </Typography>
+              <IconButton
+                onClick={() => setShowUpdatePopup(false)}
+                size="small"
+              >
+                <CloseIcon />
+              </IconButton>
+            </Box>
+            <Typography
+              variant="body2"
+              sx={{
+                whiteSpace: 'pre-line',
+                mb: 2,
+                color: '#333',
+                textAlign: 'left',
+                width: '100%',
+              }}
+            >
+              {UPDATE_SUMMARY}
+            </Typography>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={() => setShowUpdatePopup(false)}
+              sx={{
+                alignSelf: 'flex-end',
+                mt: 1,
+                borderRadius: 2,
+                fontWeight: 600,
+                px: 3,
+              }}
+            >
+              Dismiss
+            </Button>
+          </Paper>
+        </Box>
+      )}
     </Box>
   );
 }
 
-function ProviderDetails({ provider, providerStates, handleProviderState }) {
+function MapSearchFocus({ searchMarker }) {
+  const map = useMap();
+  React.useEffect(() => {
+    if (searchMarker) {
+      map.setView([searchMarker.lat, searchMarker.lng], 13, { animate: true }); // Changed zoom from 15 to 13
+    }
+  }, [searchMarker, map]);
+  return null;
+}
+
+function ProviderDetails({ provider, providerStates }) {
   const state = providerStates[provider.Company] || 'normal';
   return (
     <Box
@@ -764,8 +904,8 @@ function ProviderDetails({ provider, providerStates, handleProviderState }) {
         target="_blank"
         rel="noopener"
         onClick={(e) => {
+          // Only stop propagation, do NOT favorite on link click
           e.stopPropagation();
-          handleProviderState(provider.Company);
         }}
       >
         {provider.Company}
